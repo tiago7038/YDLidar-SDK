@@ -505,6 +505,28 @@ bool CYdLidar::isScanning() const
 
 bool CYdLidar::doProcessSimple(LaserScan &outscan)
 {
+  // Reconfigure outside the SDK scan thread: frequency commands stop and
+  // join that thread, so running them inside auto-reconnect would self-join.
+  if (lidarPtr && lidarPtr->consumeReconnectEvent())
+  {
+    lidarPtr->stop();
+    if (!reconfigureAfterReconnect())
+    {
+      return false;
+    }
+
+    const result_t restart = lidarPtr->startScan();
+    if (!IS_OK(restart))
+    {
+      error("Failed to restart lidar after reconnect configuration");
+      return false;
+    }
+    lidarPtr->setAutoReconnect(m_AutoReconnect);
+    lidarPtr->setDriverError(NoError);
+    info("Lidar restarted with configured settings");
+    return false;
+  }
+
   //判断是否已启动扫描
   if (!checkHardware())
   {
@@ -801,9 +823,10 @@ bool CYdLidar::turnOff()
 {
   if (lidarPtr)
   {
-    if (lidarPtr->isscanning())
-      info("Lidar has stopped!");
+    const bool wasScanning = lidarPtr->isscanning();
     lidarPtr->stop();
+    if (wasScanning)
+      info("Lidar has stopped!");
   }
 
   return true;
@@ -1467,6 +1490,44 @@ void CYdLidar::checkSampleRate()
     defalutSampleRate.push_back(m_SampleRate);
     info("Current sample rate: %.02fK", m_SampleRate);
   }
+}
+
+bool CYdLidar::reconfigureAfterReconnect()
+{
+  info("Lidar reconnected; reapplying configured device settings");
+
+  if (hasSampleRate(lidar_model))
+  {
+    checkSampleRate();
+  }
+  else if (!defalutSampleRate.empty())
+  {
+    m_PointTime = 1e9 / (defalutSampleRate.front() * 1000);
+    lidarPtr->setPointTime(m_PointTime);
+  }
+
+  bool configured = true;
+  if (hasScanFrequencyCtrl(lidar_model) ||
+      (isTOFLidar(m_LidarType) && !m_SingleChannel) ||
+      isNetTOFLidar(m_LidarType))
+  {
+    configured = checkScanFrequency();
+  }
+
+  if (configured && isSupportHeartBeat(lidar_model))
+  {
+    configured = checkHeartBeat();
+  }
+
+  if (configured)
+  {
+    info("Lidar settings reapplied successfully");
+  }
+  else
+  {
+    error("Failed to reapply lidar settings after reconnect");
+  }
+  return configured;
 }
 
 bool CYdLidar::checkScanFrequency()

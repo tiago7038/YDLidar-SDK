@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include <atomic>
 #include <map>
 #include <thread>
 #include <core/base/v8stdint.h>
@@ -233,6 +234,11 @@ namespace ydlidar
          */
         virtual void setAutoReconnect(const bool &enable) {
           isAutoReconnect = enable;
+        }
+
+        bool consumeReconnectEvent()
+        {
+          return reconnectEvent.exchange(false);
         }
 
         /**
@@ -585,9 +591,9 @@ namespace ydlidar
       protected:
         /* Variable for LIDAR compatibility */
         /// LiDAR Scanning state
-        bool m_isScanning = false;
+        std::atomic<bool> m_isScanning{false};
         /// LiDAR connected state
-        bool m_isConnected = false;
+        std::atomic<bool> m_isConnected{false};
         /// Scan Data Event
         Event _dataEvent;
         /// Data Locker（不支持嵌套）
@@ -619,7 +625,8 @@ namespace ydlidar
         ///
         int retryCount = 0;
         /// auto reconnect
-        bool isAutoReconnect = true;
+        std::atomic<bool> isAutoReconnect{true};
+        std::atomic<bool> reconnectEvent{false};
         /// auto connecting state
         bool isAutoconnting = false;
         lidarConfig m_config;

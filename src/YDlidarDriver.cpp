@@ -198,7 +198,11 @@ void YDlidarDriver::disconnect()
   if (!m_isConnected)
     return;
 
-  stop();
+  // turnOff() normally stops and joins the scan thread before disconnecting.
+  // Do not send a second set of stop commands to a potentially wedged USB
+  // device. Still stop here when callers disconnect while actively scanning.
+  if (m_isScanning)
+    stop();
   delay(10);
 
   ScopedLocker l(_cmd_lock);
@@ -395,6 +399,7 @@ result_t YDlidarDriver::checkAutoConnecting(bool serialError)
         {
           setDriverError(NoError);
         }
+        reconnectEvent = true;
         return ans;
       }
       else
@@ -1022,10 +1027,17 @@ result_t YDlidarDriver::startAutoScan(bool force, uint32_t timeout)
 
 result_t YDlidarDriver::stop()
 {
-  stopThread();
+  // Tell the parser thread to leave its loop before performing device I/O.
+  // This prevents auto-reconnect and bounds the join to the current read.
+  m_isScanning = false;
+  _dataEvent.set();
+
+  // Ask the device to stop producing data first. This lets a pending serial
+  // read finish before stopThread() waits for the parser thread to exit.
   stopScan();
   if (isSupportMotorCtrl(model))
     stopMotor();
+  stopThread();
 
   return RESULT_OK;
 }

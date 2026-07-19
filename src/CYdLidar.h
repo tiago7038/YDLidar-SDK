@@ -236,6 +236,9 @@ class YDLIDAR_API CYdLidar {
    */
   bool checkScanFrequency();
 
+  // Reapply device-side settings after USB auto-reconnect and before scanning.
+  bool reconfigureAfterReconnect();
+
   /**
    * @brief checkHeartBeat
    * @return

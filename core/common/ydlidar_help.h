@@ -59,15 +59,18 @@ using namespace base;
  */
 namespace common {
 
-//颜色定义
-#ifndef COLOR
-    #define COLOFF  "\033[0m"      ///关闭所有属性
-    #define RED      "\033[0;31m"   ///"\033[显示方式;字体颜色;背景颜色m"
-    #define GREEN    "\033[0;32m"
-    #define YELLOW   "\033[0;33m"
-    #define BLUE     "\033[0;34m"
-    #define PURPLE   "\033[0;35m"
-#endif
+enum LogLevel {
+  LogLevelDebug,
+  LogLevelInfo,
+  LogLevelWarn,
+  LogLevelError
+};
+
+typedef void (*LogCallback)(LogLevel level, const char *message,
+                            void *userData);
+
+YDLIDAR_API void setLogCallback(LogCallback callback, void *userData = NULL);
+YDLIDAR_API void dispatchLog(LogLevel level, const char *message);
 
 //打印系统时间
 #define UNIX_PRINT_TIME  \
@@ -86,56 +89,47 @@ namespace common {
 #else
   #define PRINT_TIME UNIX_PRINT_TIME
 #endif
-//格式化字符串
-#define FORMAT_STDOUT \
-  char buff[1024] = {0}; \
-  va_list ap; \
-  va_start(ap, fmt); \
-  vsprintf(buff, fmt, ap); \
-  va_end(ap); \
-  printf(buff); \
-  printf("\n");
+inline void logFormatted(LogLevel level, const char *fmt, va_list args)
+{
+  char buffer[2048] = {0};
+  vsnprintf(buffer, sizeof(buffer), fmt, args);
+  dispatchLog(level, buffer);
+}
 
 //调试
-inline void debug(char* fmt, ...)
+inline void debug(const char *fmt, ...)
 {
-  printf(GREEN); //设置绿色
-  PRINT_TIME
-  printf("[debug] ");
-  FORMAT_STDOUT
-  printf(COLOFF); //恢复默认颜色
-  fflush(stdout);
+  va_list args;
+  va_start(args, fmt);
+  logFormatted(LogLevelDebug, fmt, args);
+  va_end(args);
 }
 
 //常规
-inline void info(char* fmt, ...)
+inline void info(const char *fmt, ...)
 {
-  PRINT_TIME
-  printf("[info] ");
-  FORMAT_STDOUT
-  fflush(stdout);
+  va_list args;
+  va_start(args, fmt);
+  logFormatted(LogLevelInfo, fmt, args);
+  va_end(args);
 }
 
 //警告
-inline void warn(char* fmt, ...)
+inline void warn(const char *fmt, ...)
 {
-  printf(YELLOW); //设置黄色
-  PRINT_TIME
-  printf("[warn] ");
-  FORMAT_STDOUT
-  printf(COLOFF); //恢复默认颜色
-  fflush(stdout);
+  va_list args;
+  va_start(args, fmt);
+  logFormatted(LogLevelWarn, fmt, args);
+  va_end(args);
 }
 
 //错误
-inline void error(char* fmt, ...)
+inline void error(const char *fmt, ...)
 {
-  printf(RED); //设置红色
-  PRINT_TIME
-  printf("[error] ");
-  FORMAT_STDOUT
-  printf(COLOFF); //恢复默认颜色
-  fflush(stdout);
+  va_list args;
+  va_start(args, fmt);
+  logFormatted(LogLevelError, fmt, args);
+  va_end(args);
 }
 
 //调试（16进制）
@@ -143,16 +137,13 @@ inline void debugh(const uint8_t *data, int size, const char* prefix=NULL)
 {
   if (!data || !size)
     return;
-  printf(GREEN); //设置绿色
-  PRINT_TIME
-  printf("[debug] ");
+  std::ostringstream message;
   if (prefix)
-      printf(prefix);
-  for (int i=0; i<size; ++i)
-      printf("%02X", data[i]);
-  printf("\n");
-  printf(COLOFF); //恢复默认颜色
-  fflush(stdout);
+    message << prefix;
+  for (int i = 0; i < size; ++i)
+    message << std::hex << std::uppercase << std::setw(2)
+            << std::setfill('0') << static_cast<int>(data[i]);
+  dispatchLog(LogLevelDebug, message.str().c_str());
 }
 
 //常规（16进制）
@@ -160,14 +151,13 @@ inline void infoh(const uint8_t *data, int size, const char* prefix=NULL)
 {
   if (!data || !size)
       return;
-  PRINT_TIME
-  printf("[info] ");
+  std::ostringstream message;
   if (prefix)
-      printf(prefix);
-  for (int i=0; i<size; ++i)
-      printf("%02X", data[i]);
-  printf("\n");
-  fflush(stdout);
+    message << prefix;
+  for (int i = 0; i < size; ++i)
+    message << std::hex << std::uppercase << std::setw(2)
+            << std::setfill('0') << static_cast<int>(data[i]);
+  dispatchLog(LogLevelInfo, message.str().c_str());
 }
 
 /*!
